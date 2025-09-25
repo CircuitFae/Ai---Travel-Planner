@@ -1,47 +1,82 @@
 import streamlit as st
 import requests
-import json
+import pandas as pd
 
 # Define the URL of our FastAPI backend
 BACKEND_URL = "http://127.0.0.1:8000/generate-travel-plan"
 
 # --- Streamlit User Interface ---
 
-st.title("AI Travel Planner ✈️")
+st.set_page_config(page_title="AI Travel Planner", page_icon="✈️", layout="wide")
 
-st.write("Enter your destination and the duration of your trip to get a personalized itinerary.")
+st.markdown("""
+<style>
+    .stButton>button {
+        background-color: #4CAF50;
+        color: white;
+    }
+    .st-emotion-cache-1y4p8pa {
+        max-width: 80rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# Input fields for the user
-destination = st.text_input("Destination", "e.g., Paris, France")
-duration = st.number_input("Duration (in days)", min_value=1, max_value=30, value=5)
+st.title("AI Student Travel Planner 🎓✈️")
+st.info("Tell us about your dream trip, and we'll generate a personalized, budget-friendly itinerary with an interactive map!")
 
-# Button to generate the plan
-if st.button("Generate Itinerary"):
-    if destination and duration > 0:
-        # Prepare the data to be sent to the backend
+col1, col2 = st.columns(2)
+
+with col1:
+    destination = st.text_input("🌍 Where do you want to go?", "e.g., Kyoto, Japan")
+    budget = st.selectbox("💰 What's your budget?", ["💸 Budget-friendly", " moderate", "💰 Luxury"])
+
+with col2:
+    duration = st.number_input("📅 How many days?", min_value=1, max_value=30, value=7)
+    interests = st.multiselect(
+        "🎨 What are your interests?",
+        ["History", "Art & Culture", "Food", "Nightlife", "Nature & Outdoors", "Shopping", "Technology"],
+        ["History", "Food"]
+    )
+
+if st.button("✨ Generate My Itinerary"):
+    if destination and duration > 0 and interests:
         payload = {
             "destination": destination,
-            "duration": int(duration)
+            "duration": int(duration),
+            "budget": budget.split(" ")[1],
+            "interests": [interest.lower() for interest in interests]
         }
         
-        # Show a spinner while waiting for the response
-        with st.spinner("Generating your personalized travel plan... This may take a moment."):
+        with st.spinner("🌍 Packing our bags and crafting your adventure..."):
             try:
-                # Send a POST request to the backend
                 response = requests.post(BACKEND_URL, json=payload)
                 
-                # Check if the request was successful
                 if response.status_code == 200:
-                    itinerary = response.json().get("itinerary")
-                    st.success("Here is your travel plan!")
-                    st.write(itinerary)
+                    data = response.json()
+                    itinerary = data.get("itinerary")
+                    locations = data.get("locations")
+                    
+                    st.success("🚀 Your personalized travel plan is ready!")
+                    st.markdown("---")
+                    
+                    # **NEW:** Display the map if we have location data
+                    if locations:
+                        st.subheader("📍 Interactive Map")
+                        # Create a Pandas DataFrame
+                        df = pd.DataFrame(locations)
+                        # Rename columns for st.map()
+                        df.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True)
+                        st.map(df)
+
+                    st.subheader("📝 Your Itinerary")
+                    st.markdown(itinerary)
                 else:
-                    st.error(f"Error: Could not generate itinerary. Status code: {response.status_code}")
-                    st.error(response.text) # Show the error from the backend
+                    st.error(f"Oh no! We hit a bump. Error: {response.status_code}")
+                    st.json(response.json())
 
             except requests.exceptions.ConnectionError:
-                st.error("Connection Error: Could not connect to the backend. Is the FastAPI server running?")
+                st.error("Could not connect to the planner service. Please make sure the backend is running.")
             except Exception as e:
                 st.error(f"An unexpected error occurred: {e}")
     else:
-        st.warning("Please enter a destination and duration.")
+        st.warning("Please fill in all the fields to get your plan.")

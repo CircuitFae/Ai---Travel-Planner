@@ -1,7 +1,9 @@
 import os
+import json
 import google.generativeai as genai
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import List
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -16,10 +18,13 @@ genai.configure(api_key=api_key)
 # Create an instance of the FastAPI class
 app = FastAPI()
 
-# Pydantic model to define the structure of the request body
+# --- Pydantic Models ---
+
 class TravelRequest(BaseModel):
     destination: str
-    duration: int # Duration in days
+    duration: int = Field(..., gt=0, description="Duration in days, must be greater than 0")
+    budget: str = Field(..., description="e.g., Budget-friendly, Mid-range, Luxury")
+    interests: List[str] = Field(..., description="A list of interests, e.g., ['history', 'food', 'nightlife']")
 
 # --- API Endpoints ---
 
@@ -29,15 +34,40 @@ def read_root():
 
 @app.post("/generate-travel-plan")
 def generate_travel_plan(request: TravelRequest):
-    # Initialize the Generative Model
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    try:
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
-    # Create the prompt for the AI
-    prompt = f"Create a detailed day-by-day travel itinerary for a {request.duration}-day trip to {request.destination}. Include suggested activities, landmarks, and food recommendations."
+        # **NEW:** Advanced prompt asking for a JSON output
+        prompt = f"""
+        You are an expert travel planner specializing in creating itineraries for students.
+        Your goal is to create a detailed, exciting, and practical travel plan.
+        
+        Based on the following details:
+        - Destination: {request.destination}
+        - Duration: {request.duration} days
+        - Budget: {request.budget}
+        - Interests: {', '.join(request.interests)}
 
-    # Generate content using the model
-    response = model.generate_content(prompt)
+        Please generate a response in a valid JSON format with two keys:
+        1. "itinerary": A string containing a detailed, day-by-day itinerary in Markdown format.
+        2. "locations": A JSON array of objects. Each object should represent a specific landmark or restaurant mentioned in the itinerary and must have three keys: "name", "latitude", and "longitude".
 
-    # Return the generated text
-    return {"itinerary": response.text}
-    
+        Example for a single location object: {{"name": "Eiffel Tower", "latitude": 48.8584, "longitude": 2.2945}}
+        
+        Ensure the entire output is a single, valid JSON object.
+        """
+
+        response = model.generate_content(prompt)
+        
+        if not response.parts:
+            raise ValueError("The AI response was empty or blocked.")
+
+        # **NEW:** Clean and parse the JSON response from the AI
+        response_text = response.text.strip().replace("```json", "").replace("```", "")
+        response_data = json.loads(response_text)
+        
+        return response_data
+
+    except Exception as e:
+        print(f"An error occurred: {e}") 
+        raise HTTPException(status_code=503, detail=f"Failed to generate itinerary from AI service: {e}")
