@@ -35,7 +35,7 @@ def read_root():
 @app.post("/generate-travel-plan")
 def generate_travel_plan(request: TravelRequest):
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('models/gemini-pro-latest')
 
         # **NEW:** Advanced prompt asking for a JSON output
         prompt = f"""
