@@ -1,11 +1,23 @@
 import streamlit as st
 import requests
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
-# Define the URL of our FastAPI backend
-BACKEND_URL = "http://127.0.0.1:8000/generate-travel-plan"
+# --- Dynamic Backend URL Configuration ---
+# This is the only section that needs to be changed.
+# It makes the app work both on Vercel and your local machine.
+if "VERCEL_URL" in os.environ:
+    # We are running on Vercel, use the public URL with the /api route
+    base_url = f"https://{os.getenv('VERCEL_URL')}"
+    BACKEND_URL = f"{base_url}/api/generate-travel-plan"
+else:
+    # We are running locally, use the localhost address
+    load_dotenv()
+    BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000/generate-travel-plan")
 
 # --- Streamlit User Interface ---
+# (The rest of your code remains exactly the same)
 
 st.set_page_config(page_title="AI Travel Planner", page_icon="✈️", layout="wide")
 
@@ -43,13 +55,14 @@ if st.button("✨ Generate My Itinerary"):
         payload = {
             "destination": destination,
             "duration": int(duration),
-            "budget": budget.split(" ")[1],
+            "budget": budget.split(" ")[1] if " " in budget else budget,
             "interests": [interest.lower() for interest in interests]
         }
         
         with st.spinner("🌍 Packing our bags and crafting your adventure..."):
             try:
-                response = requests.post(BACKEND_URL, json=payload)
+                # We are only changing the timeout value in the line below
+                response = requests.post(BACKEND_URL, json=payload, timeout=120)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -59,12 +72,9 @@ if st.button("✨ Generate My Itinerary"):
                     st.success("🚀 Your personalized travel plan is ready!")
                     st.markdown("---")
                     
-                    # **NEW:** Display the map if we have location data
                     if locations:
                         st.subheader("📍 Interactive Map")
-                        # Create a Pandas DataFrame
                         df = pd.DataFrame(locations)
-                        # Rename columns for st.map()
                         df.rename(columns={'latitude': 'lat', 'longitude': 'lon'}, inplace=True)
                         st.map(df)
 
@@ -80,3 +90,5 @@ if st.button("✨ Generate My Itinerary"):
                 st.error(f"An unexpected error occurred: {e}")
     else:
         st.warning("Please fill in all the fields to get your plan.")
+
+
