@@ -5,19 +5,22 @@ import os
 from dotenv import load_dotenv
 
 # --- Dynamic Backend URL Configuration ---
-# This is the only section that needs to be changed.
-# It makes the app work both on Vercel and your local machine.
+# This robust logic determines the correct backend URL for any environment.
+load_dotenv() # Load .env file if it exists (for local development)
+
+# Check if running on Vercel
 if "VERCEL_URL" in os.environ:
-    # We are running on Vercel, use the public URL with the /api route
-    base_url = f"https://{os.getenv('VERCEL_URL')}"
-    BACKEND_URL = f"{base_url}/api/generate-travel-plan"
+    # On Vercel, the backend is at a relative path on the same domain
+    API_ENDPOINT = "/api/generate-travel-plan"
+# Check if an explicit backend URL is provided (for Render, etc.)
+elif "BACKEND_URL" in os.environ:
+    base_url = os.getenv("BACKEND_URL")
+    API_ENDPOINT = f"{base_url}/generate-travel-plan"
+# Fallback for local development
 else:
-    # We are running locally, use the localhost address
-    load_dotenv()
-    BACKEND_URL = os.getenv("BACKEND_URL", "http://127.0.0.1:8000/generate-travel-plan")
+    API_ENDPOINT = "http://127.0.0.1:8000/generate-travel-plan"
 
 # --- Streamlit User Interface ---
-# (The rest of your code remains exactly the same)
 
 st.set_page_config(page_title="AI Travel Planner", page_icon="✈️", layout="wide")
 
@@ -40,7 +43,7 @@ col1, col2 = st.columns(2)
 
 with col1:
     destination = st.text_input("🌍 Where do you want to go?", "e.g., Kyoto, Japan")
-    budget = st.selectbox("💰 What's your budget?", ["💸 Budget-friendly", " moderate", "💰 Luxury"])
+    budget = st.selectbox("💰 What's your budget?", ["Budget-friendly", "Moderate", "Luxury"])
 
 with col2:
     duration = st.number_input("📅 How many days?", min_value=1, max_value=30, value=7)
@@ -52,17 +55,18 @@ with col2:
 
 if st.button("✨ Generate My Itinerary"):
     if destination and duration > 0 and interests:
+        # CORRECTED: Simplified payload for budget to be more robust.
         payload = {
             "destination": destination,
             "duration": int(duration),
-            "budget": budget.split(" ")[1] if " " in budget else budget,
+            "budget": budget,
             "interests": [interest.lower() for interest in interests]
         }
         
         with st.spinner("🌍 Packing our bags and crafting your adventure..."):
             try:
-                # We are only changing the timeout value in the line below
-                response = requests.post(BACKEND_URL, json=payload, timeout=120)
+                # CORRECTED: Using the single API_ENDPOINT variable and a robust timeout.
+                response = requests.post(API_ENDPOINT, json=payload, timeout=120)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -86,9 +90,10 @@ if st.button("✨ Generate My Itinerary"):
 
             except requests.exceptions.ConnectionError:
                 st.error("Could not connect to the planner service. Please make sure the backend is running.")
+            except requests.exceptions.Timeout:
+                st.error("The request timed out. The AI is taking too long to respond. Please try again.")
             except Exception as e:
                 st.error(f"An unexpected error occurred: {e}")
     else:
         st.warning("Please fill in all the fields to get your plan.")
-
 
